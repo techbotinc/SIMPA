@@ -158,6 +158,12 @@
                     </div>
                 </div>
 
+                <!-- Date & Time Input -->
+                <div>
+                    <label class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Date & Time</label>
+                    <input type="datetime-local" id="dateInput" class="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-sm focus:outline-none focus:border-primary transition font-medium text-gray-700">
+                </div>
+
                 <!-- Transaction Type Toggle -->
                 <div class="bg-gray-100 p-1 rounded-xl flex">
                     <button type="button" class="flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all shadow-sm bg-white text-rose-500" id="btnExpense" onclick="setType('expense')">
@@ -225,6 +231,7 @@
 
         // --- DOM Elements ---
         const amountInput = document.getElementById('amount');
+        const dateInput = document.getElementById('dateInput');
         const noteInput = document.getElementById('note');
         const typeInput = document.getElementById('type');
         const accountInput = document.getElementById('account');
@@ -322,8 +329,12 @@
                 emptyState.classList.remove('flex');
             }
 
-            // Sort by new first
-            const sorted = [...transactions].reverse();
+            // Sort by date (newest first), fallback to ID if isoDate is missing (legacy data)
+            const sorted = [...transactions].sort((a, b) => {
+                const dateA = a.isoDate ? new Date(a.isoDate) : new Date(a.id);
+                const dateB = b.isoDate ? new Date(b.isoDate) : new Date(b.id);
+                return dateB - dateA;
+            });
 
             sorted.forEach((t, index) => {
                 const isIncome = t.type === 'income';
@@ -333,6 +344,9 @@
                 // Icon based on type
                 const iconBg = isIncome ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-500';
                 const iconClass = isIncome ? 'ph-arrow-down-left' : 'ph-arrow-up-right';
+
+                // Display Note if exists, otherwise show category again or generic text
+                const subText = t.note ? t.note : t.category;
 
                 el.innerHTML = `
                     <div class="flex items-center gap-3">
@@ -344,15 +358,18 @@
                             <p class="text-xs text-gray-500 flex items-center gap-1">
                                 <span>${t.account}</span>
                                 <span class="w-1 h-1 rounded-full bg-gray-300"></span>
-                                <span class="truncate max-w-[100px]">${t.note || t.date}</span>
+                                <span class="truncate max-w-[100px]">${subText}</span>
                             </p>
                         </div>
                     </div>
                     <div class="text-right">
                         <p class="font-bold ${isIncome ? 'text-emerald-600' : 'text-rose-500'}">${isIncome ? '+' : '-'} ${t.amount}</p>
-                        <button onclick="deleteTransaction(${t.id})" class="text-xs text-gray-300 hover:text-red-500 mt-1">
-                            <i class="ph ph-trash"></i>
-                        </button>
+                        <div class="flex flex-col items-end">
+                            <span class="text-[10px] text-gray-400 mt-0.5">${t.date}</span>
+                            <button onclick="deleteTransaction(${t.id})" class="text-xs text-gray-300 hover:text-red-500 mt-1 p-1">
+                                <i class="ph ph-trash"></i>
+                            </button>
+                        </div>
                     </div>
                 `;
                 list.appendChild(el);
@@ -414,45 +431,16 @@
 
         function openModal() {
             modal.classList.remove('hidden');
+            
+            // Set default date to now (local time)
+            const now = new Date();
+            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            dateInput.value = now.toISOString().slice(0, 16);
+
             amountInput.focus();
         }
 
         function closeModal() {
             modal.classList.add('hidden');
             // Reset form slightly
-            document.getElementById('addForm').reset();
-            setType('expense');
-            accountInput.value = 'Cash';
-            renderAccounts();
-            categoryInput.value = (categories.length > 0) ? categories[0] : '';
-            renderCategories();
-        }
-
-        // --- Form Submission ---
-
-        document.getElementById('addForm').addEventListener('submit', (e) => {
-            e.preventDefault();
-
-            const amount = parseFloat(amountInput.value);
-            if (!amount || amount <= 0) return;
-
-            const newTx = {
-                id: Date.now(),
-                amount: amount,
-                type: typeInput.value,
-                account: accountInput.value,
-                category: categoryInput.value || 'General',
-                note: noteInput.value,
-                date: new Date().toLocaleDateString()
-            };
-
-            transactions.push(newTx);
-            saveData();
-            closeModal();
-        });
-
-    </script>
-</body>
-</html>
-
-
+            document.getEl

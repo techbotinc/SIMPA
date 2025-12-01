@@ -75,7 +75,7 @@
                 <h1 class="text-sm font-medium opacity-80">Total Balance</h1>
                 <h2 class="text-3xl font-bold mt-1" id="totalBalance">Rs. 0</h2>
             </div>
-            <div class="h-10 w-10 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm cursor-pointer hover:bg-white/30 transition" onclick="resetData()">
+            <div class="h-10 w-10 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm cursor-pointer hover:bg-white/30 transition" onclick="confirmResetData()">
                 <i class="ph ph-trash text-xl"></i>
             </div>
         </div>
@@ -107,7 +107,8 @@
     <main class="flex-1 overflow-y-auto p-5 pb-24 no-scrollbar relative -top-4">
         <div class="flex justify-between items-center mb-4 px-1">
             <h3 class="font-bold text-gray-700 text-lg">Recent Transactions</h3>
-            <button onclick="toggleFilter()" class="text-sm text-primary font-medium">View All</button>
+            <!-- Placeholder button: Removed functionality as requested -->
+            <button onclick="console.log('View All clicked')" class="text-sm text-primary font-medium">View All</button>
         </div>
 
         <!-- Empty State -->
@@ -213,6 +214,28 @@
         </div>
     </div>
 
+    <!-- Custom Dialog Modal for Confirm/Prompt -->
+    <div id="customDialogModal" class="fixed inset-0 z-[60] hidden">
+        <div class="absolute inset-0 bg-black/70 backdrop-blur-sm transition-opacity" onclick="hideCustomDialog()"></div>
+        <div class="absolute inset-0 flex items-center justify-center p-6">
+            <div class="bg-white rounded-2xl p-6 shadow-2xl w-full max-w-sm transform scale-95 transition-all">
+                <h3 id="dialogTitle" class="text-xl font-bold text-gray-800 mb-2"></h3>
+                <p id="dialogMessage" class="text-sm text-gray-600 mb-4"></p>
+                
+                <input type="text" id="dialogInput" class="w-full bg-gray-50 border border-gray-300 rounded-lg p-3 text-sm focus:outline-none focus:border-primary hidden mb-4" placeholder="Enter text here...">
+
+                <div class="flex justify-end gap-3">
+                    <button id="dialogCancelBtn" onclick="hideCustomDialog()" class="px-4 py-2 text-sm font-medium text-gray-600 rounded-lg hover:bg-gray-100 transition">
+                        Cancel
+                    </button>
+                    <button id="dialogConfirmBtn" class="px-4 py-2 text-sm font-medium text-white rounded-lg bg-primary shadow-md shadow-indigo-500/30 active:scale-95 transition">
+                        Confirm
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         // --- State Management ---
         const defaultAccounts = [
@@ -238,9 +261,22 @@
         const categoryInput = document.getElementById('category');
         const modal = document.getElementById('transactionModal');
         
+        // Custom Dialog Elements
+        const dialogModal = document.getElementById('customDialogModal');
+        const dialogTitle = document.getElementById('dialogTitle');
+        const dialogMessage = document.getElementById('dialogMessage');
+        const dialogInput = document.getElementById('dialogInput');
+        const dialogConfirmBtn = document.getElementById('dialogConfirmBtn');
+        const dialogCancelBtn = document.getElementById('dialogCancelBtn');
+
         // --- Initialization ---
         document.addEventListener('DOMContentLoaded', () => {
             renderAccounts();
+            // Ensure a category is selected if none is present (fixes initial bug if localStorage was empty)
+            if (!categoryInput.value || categories.length === 0) {
+                categoryInput.value = defaultCategories[0] || 'General';
+                if (categories.length === 0) categories = defaultCategories;
+            }
             renderCategories();
             updateUI();
         });
@@ -280,7 +316,13 @@
         }
 
         function formatCurrency(num) {
-            return 'Rs. ' + num.toLocaleString('en-IN');
+            // Use Intl.NumberFormat for proper Indian Rupee formatting (Rs.)
+            const formatter = new Intl.NumberFormat('en-IN', {
+                style: 'currency',
+                currency: 'INR',
+                minimumFractionDigits: 0
+            });
+            return formatter.format(num).replace('₹', 'Rs. ');
         }
 
         // --- Render Functions ---
@@ -329,14 +371,14 @@
                 emptyState.classList.remove('flex');
             }
 
-            // Sort by date (newest first), fallback to ID if isoDate is missing (legacy data)
+            // Sort by isoDate (newest first)
             const sorted = [...transactions].sort((a, b) => {
                 const dateA = a.isoDate ? new Date(a.isoDate) : new Date(a.id);
                 const dateB = b.isoDate ? new Date(b.isoDate) : new Date(b.id);
                 return dateB - dateA;
             });
 
-            sorted.forEach((t, index) => {
+            sorted.forEach((t) => {
                 const isIncome = t.type === 'income';
                 const el = document.createElement('div');
                 el.className = 'bg-white rounded-2xl p-4 shadow-sm flex justify-between items-center border border-gray-100';
@@ -345,8 +387,8 @@
                 const iconBg = isIncome ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-500';
                 const iconClass = isIncome ? 'ph-arrow-down-left' : 'ph-arrow-up-right';
 
-                // Display Note if exists, otherwise show category again or generic text
-                const subText = t.note ? t.note : t.category;
+                // Display Note if exists, otherwise show category or account
+                const subText = t.note ? t.note : t.account;
 
                 el.innerHTML = `
                     <div class="flex items-center gap-3">
@@ -363,10 +405,10 @@
                         </div>
                     </div>
                     <div class="text-right">
-                        <p class="font-bold ${isIncome ? 'text-emerald-600' : 'text-rose-500'}">${isIncome ? '+' : '-'} ${t.amount}</p>
+                        <p class="font-bold ${isIncome ? 'text-emerald-600' : 'text-rose-500'}">${isIncome ? '+' : '-'} ${formatCurrency(t.amount)}</p>
                         <div class="flex flex-col items-end">
                             <span class="text-[10px] text-gray-400 mt-0.5">${t.date}</span>
-                            <button onclick="deleteTransaction(${t.id})" class="text-xs text-gray-300 hover:text-red-500 mt-1 p-1">
+                            <button onclick="confirmDeleteTransaction(${t.id})" class="text-xs text-gray-300 hover:text-red-500 mt-1 p-1">
                                 <i class="ph ph-trash"></i>
                             </button>
                         </div>
@@ -403,28 +445,54 @@
         }
 
         function addNewCategoryPrompt() {
-            const newCat = prompt("Enter new category name:");
-            if (newCat && newCat.trim() !== "") {
-                categories.push(newCat.trim());
-                selectCategory(newCat.trim());
-                saveData(); // saves new category list
-                // renderCategories is called inside selectCategory
-            }
+            showCustomDialog({
+                title: "Add New Category",
+                message: "Please enter the name for your new category.",
+                type: 'input',
+                placeholder: 'e.g., Entertainment',
+                onConfirm: (newCat) => {
+                    if (newCat && newCat.trim() !== "") {
+                        categories.push(newCat.trim());
+                        selectCategory(newCat.trim());
+                        saveData();
+                    }
+                }
+            });
+        }
+
+        function confirmDeleteTransaction(id) {
+            showCustomDialog({
+                title: "Confirm Deletion",
+                message: "Are you sure you want to permanently delete this transaction?",
+                type: 'confirm',
+                onConfirm: () => {
+                    deleteTransaction(id);
+                }
+            });
         }
 
         function deleteTransaction(id) {
-            if(confirm("Delete this transaction?")) {
-                transactions = transactions.filter(t => t.id !== id);
-                saveData();
-            }
+            transactions = transactions.filter(t => t.id !== id);
+            saveData();
         }
 
-        function resetData() {
-            if(confirm("Are you sure you want to reset all data? This cannot be undone.")) {
-                localStorage.removeItem('transactions');
-                transactions = [];
-                updateUI();
-            }
+        function confirmResetData() {
+            showCustomDialog({
+                title: "Reset All Data",
+                message: "WARNING: This will delete ALL your transactions and custom categories. This action cannot be undone.",
+                type: 'confirm',
+                onConfirm: () => {
+                    localStorage.removeItem('transactions');
+                    localStorage.removeItem('categories');
+                    transactions = [];
+                    categories = defaultCategories;
+                    categoryInput.value = defaultCategories[0];
+                    renderCategories();
+                    updateUI();
+                },
+                confirmText: 'Yes, Reset',
+                confirmColor: 'bg-danger shadow-red-500/30'
+            });
         }
 
         // --- Modal Logic ---
@@ -434,6 +502,7 @@
             
             // Set default date to now (local time)
             const now = new Date();
+            // Use UTC offset to correctly format the local time for input type="datetime-local"
             now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
             dateInput.value = now.toISOString().slice(0, 16);
 
@@ -442,5 +511,109 @@
 
         function closeModal() {
             modal.classList.add('hidden');
-            // Reset form slightly
-            document.getEl
+            // Reset form
+            document.getElementById('addForm').reset();
+            setType('expense');
+            accountInput.value = 'Cash';
+            renderAccounts();
+            categoryInput.value = (categories.length > 0) ? categories[0] : 'General';
+            renderCategories();
+        }
+
+        // --- Custom Dialog Logic ---
+
+        let currentConfirmCallback = null;
+        let currentCancelCallback = null;
+
+        function showCustomDialog({ title, message, type = 'confirm', placeholder = '', onConfirm, onCancel }) {
+            dialogTitle.innerText = title;
+            dialogMessage.innerText = message;
+            
+            dialogConfirmBtn.classList.remove('bg-danger', 'shadow-red-500/30');
+            dialogConfirmBtn.classList.add('bg-primary', 'shadow-indigo-500/30');
+            dialogConfirmBtn.innerText = 'Confirm';
+            dialogCancelBtn.innerText = 'Cancel';
+
+            dialogInput.value = '';
+            
+            if (type === 'input') {
+                dialogInput.classList.remove('hidden');
+                dialogInput.placeholder = placeholder;
+                dialogConfirmBtn.innerText = 'Submit';
+            } else {
+                dialogInput.classList.add('hidden');
+            }
+
+            if (onConfirm) {
+                currentConfirmCallback = onConfirm;
+            }
+            if (onCancel) {
+                currentCancelCallback = onCancel;
+            }
+
+            dialogModal.classList.remove('hidden');
+        }
+
+        function hideCustomDialog() {
+            dialogModal.classList.add('hidden');
+            currentConfirmCallback = null;
+            currentCancelCallback = null;
+        }
+
+        dialogCancelBtn.onclick = () => {
+            hideCustomDialog();
+            if (currentCancelCallback) currentCancelCallback();
+        };
+
+        dialogConfirmBtn.onclick = () => {
+            const isInput = !dialogInput.classList.contains('hidden');
+            let result = isInput ? dialogInput.value.trim() : true;
+
+            hideCustomDialog();
+            if (currentConfirmCallback) {
+                if (isInput) {
+                    currentConfirmCallback(result);
+                } else {
+                    currentConfirmCallback();
+                }
+            }
+        };
+
+
+        // --- Form Submission ---
+
+        document.getElementById('addForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+
+            const amount = parseFloat(amountInput.value);
+            if (!amount || amount <= 0) {
+                console.error("Invalid amount entered.");
+                return;
+            }
+
+            // Correctly handle Date from datetime-local input
+            const dateValue = dateInput.value;
+            // Since dateValue lacks timezone info, we treat it as local time.
+            const selectedDate = new Date(dateValue);
+
+            const newTx = {
+                id: Date.now(),
+                amount: amount,
+                type: typeInput.value,
+                account: accountInput.value,
+                category: categoryInput.value || 'General',
+                note: noteInput.value,
+                isoDate: selectedDate.toISOString(), // Stored for sorting
+                date: selectedDate.toLocaleDateString('en-IN', { 
+                    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+                }) // Stored for display
+            };
+
+            transactions.push(newTx);
+            saveData();
+            closeModal();
+        });
+
+    </script>
+</body>
+</html>
